@@ -256,7 +256,7 @@ class MainActivity : AppCompatActivity() {
 
                     cues = Srt.parse(result)
 
-                    lastSrt = Srt.from(cues)
+                    lastSrt = Srt.format(cues)
 
                     subtitles.text =
                         lastSrt
@@ -380,7 +380,7 @@ class MainActivity : AppCompatActivity() {
 
                     cues = translatedCues
 
-                    lastSrt = Srt.from(cues)
+                    lastSrt = Srt.format(cues)
 
                     subtitles.text =
                         lastSrt
