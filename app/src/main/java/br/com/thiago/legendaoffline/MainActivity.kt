@@ -370,7 +370,7 @@ class MainActivity : AppCompatActivity() {
                                         translator.translate(cue.text)
                                     )
 
-                                Srt.Cue(
+                                Cue(
                                     cue.start,
                                     cue.end,
                                     translatedText
