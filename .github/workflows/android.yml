@@ -31,8 +31,8 @@ jobs:
         run: |
           mkdir -p app/src/main/assets/models
           curl -L --fail --retry 3 \
-            -o app/src/main/assets/models/ggml-tiny.bin \
-            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
+            -o app/src/main/assets/models/ggml-base.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
 
       - name: Instalar Gradle
         run: |
