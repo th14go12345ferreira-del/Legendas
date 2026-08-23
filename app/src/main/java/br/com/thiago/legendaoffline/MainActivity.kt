@@ -43,7 +43,7 @@ class MainActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private var video: Uri? = null
 
-    private var cues = emptyList<Srt.Cue>()
+    private var cues = emptyList<Cue>()
     private var lastSrt = ""
 
     private val languages = listOf(
