@@ -1,616 +1,300 @@
 package br.com.thiago.legendaoffline
 
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
-import android.widget.Spinner
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 
-import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
-
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.common.model.DownloadConditions
-import com.google.mlkit.nl.translate.TranslateLanguage
-import com.google.mlkit.nl.translate.Translator
-import com.google.mlkit.nl.translate.TranslatorOptions
+import com.google.mlkit.common.model.RemoteModelManager
+import com.google.mlkit.nl.translate.TranslateRemoteModel
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-import java.io.File
+class ModelsActivity : AppCompatActivity() {
 
-
-class MainActivity : AppCompatActivity() {
-
-    private lateinit var status: TextView
-    private lateinit var generate: Button
-    private lateinit var translateButton: Button
-    private lateinit var export: Button
-    private lateinit var subtitles: TextView
-    private lateinit var playerView: PlayerView
-
-    private lateinit var sourceLanguageSpinner: Spinner
-    private lateinit var targetLanguageSpinner: Spinner
-
-    private var player: ExoPlayer? = null
-    private var video: Uri? = null
-
-    private var cues = emptyList<Cue>()
-    private var lastSrt = ""
+    private lateinit var modelsContainer: LinearLayout
 
     private val languages = listOf(
-        "Auto",
-        "Português",
-        "Inglês",
-        "Espanhol",
-        "Francês",
-        "Alemão",
-        "Italiano",
-        "Japonês",
-        "Coreano",
-        "Chinês",
-        "Russo",
-        "Árabe",
-        "Hindi",
-        "Turco",
-        "Holandês",
-        "Polonês",
-        "Sueco",
-        "Dinamarquês",
-        "Finlandês",
-        "Indonésio"
+        LanguageModel("Português", "pt"),
+        LanguageModel("Inglês", "en"),
+        LanguageModel("Espanhol", "es"),
+        LanguageModel("Francês", "fr"),
+        LanguageModel("Alemão", "de"),
+        LanguageModel("Italiano", "it"),
+        LanguageModel("Japonês", "ja"),
+        LanguageModel("Coreano", "ko"),
+        LanguageModel("Chinês", "zh"),
+        LanguageModel("Russo", "ru"),
+        LanguageModel("Árabe", "ar"),
+        LanguageModel("Hindi", "hi"),
+        LanguageModel("Turco", "tr"),
+        LanguageModel("Holandês", "nl"),
+        LanguageModel("Polonês", "pl"),
+        LanguageModel("Sueco", "sv"),
+        LanguageModel("Dinamarquês", "da"),
+        LanguageModel("Finlandês", "fi"),
+        LanguageModel("Indonésio", "id")
     )
 
-    private val languageCodes = mapOf(
-        "Português" to "pt",
-        "Inglês" to "en",
-        "Espanhol" to "es",
-        "Francês" to "fr",
-        "Alemão" to "de",
-        "Italiano" to "it",
-        "Japonês" to "ja",
-        "Coreano" to "ko",
-        "Chinês" to "zh",
-        "Russo" to "ru",
-        "Árabe" to "ar",
-        "Hindi" to "hi",
-        "Turco" to "tr",
-        "Holandês" to "nl",
-        "Polonês" to "pl",
-        "Sueco" to "sv",
-        "Dinamarquês" to "da",
-        "Finlandês" to "fi",
-        "Indonésio" to "id"
+    data class LanguageModel(
+        val name: String,
+        val code: String
     )
 
-    private val picker =
-        registerForActivityResult(
-            ActivityResultContracts.OpenDocument()
-        ) { uri ->
-
-            if (uri == null) {
-                return@registerForActivityResult
-            }
-
-            video = uri
-
-            try {
-                contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: Exception) {
-            }
-
-            status.text =
-                "Vídeo selecionado. O áudio será processado no aparelho."
-
-            generate.isEnabled = true
-            translateButton.isEnabled = false
-            export.isEnabled = false
-
-            player?.release()
-
-            player = ExoPlayer.Builder(this)
-                .build()
-                .also { exoPlayer ->
-
-                    playerView.player = exoPlayer
-
-                    exoPlayer.setMediaItem(
-                        MediaItem.fromUri(uri)
-                    )
-
-                    exoPlayer.prepare()
-                }
-        }
-
-
-    private val saver =
-        registerForActivityResult(
-            ActivityResultContracts.CreateDocument(
-                "application/x-subrip"
-            )
-        ) { uri ->
-
-            if (uri == null || lastSrt.isEmpty()) {
-                return@registerForActivityResult
-            }
-
-            try {
-
-                contentResolver.openOutputStream(uri)
-                    ?.bufferedWriter()
-                    ?.use { writer ->
-
-                        writer.write(lastSrt)
-                    }
-
-                status.text =
-                    "Legenda SRT exportada com sucesso."
-
-            } catch (e: Exception) {
-
-                status.text =
-                    "Erro ao exportar a legenda: ${e.message}"
-            }
-        }
-
-
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
-
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setContentView(R.layout.activity_main)
+        createScreen()
+        loadModels()
+    }
 
-        status =
-            findViewById(R.id.status)
+    private fun createScreen() {
 
-        generate =
-            findViewById(R.id.generateButton)
+        val scrollView = ScrollView(this)
 
-        translateButton =
-            findViewById(R.id.translateButton)
+        val mainLayout = LinearLayout(this)
+        mainLayout.orientation = LinearLayout.VERTICAL
+        mainLayout.setPadding(24, 24, 24, 24)
 
-        export =
-            findViewById(R.id.exportButton)
+        scrollView.addView(mainLayout)
 
-        playerView =
-            findViewById(R.id.playerView)
+        val title = TextView(this)
+        title.text = "Modelos de idiomas"
+        title.textSize = 24f
+        title.setPadding(0, 0, 0, 12)
 
-        subtitles =
-            findViewById(R.id.subtitles)
+        mainLayout.addView(title)
 
-        sourceLanguageSpinner =
-            findViewById(R.id.sourceLanguageSpinner)
+        val description = TextView(this)
+        description.text =
+            "Baixe os modelos necessários para traduzir legendas offline."
 
-        targetLanguageSpinner =
-            findViewById(R.id.targetLanguageSpinner)
+        description.textSize = 16f
+        description.setPadding(0, 0, 0, 24)
 
+        mainLayout.addView(description)
 
-        val sourceAdapter =
-            ArrayAdapter(
-                this,
-                android.R.layout.simple_spinner_dropdown_item,
-                languages
-            )
+        modelsContainer = LinearLayout(this)
+        modelsContainer.orientation = LinearLayout.VERTICAL
 
-        sourceLanguageSpinner.adapter =
-            sourceAdapter
+        mainLayout.addView(modelsContainer)
 
+        val backButton = Button(this)
+        backButton.text = "← Voltar para a página principal"
 
-        val targetLanguages =
-            languages.filter {
-                it != "Auto"
-            }
+        val backParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
 
-        val targetAdapter =
-            ArrayAdapter(
-                this,
-                android.R.layout.simple_spinner_dropdown_item,
-                targetLanguages
-            )
+        backParams.topMargin = 24
 
-        targetLanguageSpinner.adapter =
-            targetAdapter
+        backButton.layoutParams = backParams
 
-
-        generate.isEnabled = false
-        translateButton.isEnabled = false
-        export.isEnabled = false
-
-
-        findViewById<Button>(
-            R.id.selectButton
-        ).setOnClickListener {
-
-            picker.launch(
-                arrayOf("video/*")
-            )
+        backButton.setOnClickListener {
+            finish()
         }
 
+        mainLayout.addView(backButton)
 
-        generate.setOnClickListener {
+        setContentView(scrollView)
+    }
 
-            val uri = video
+    private fun loadModels() {
 
-            if (uri == null) {
+        modelsContainer.removeAllViews()
 
-                status.text =
-                    "Primeiro selecione um vídeo."
+        languages.forEach { language ->
 
-                return@setOnClickListener
-            }
+            addLanguageItem(language)
+        }
+    }
+
+    private fun addLanguageItem(language: LanguageModel) {
+
+        val itemLayout = LinearLayout(this)
+        itemLayout.orientation = LinearLayout.HORIZONTAL
+        itemLayout.gravity = Gravity.CENTER_VERTICAL
+        itemLayout.setPadding(16, 16, 16, 16)
+
+        val itemParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+
+        itemParams.bottomMargin = 12
+
+        itemLayout.layoutParams = itemParams
 
 
-            generate.isEnabled = false
-            translateButton.isEnabled = false
-            export.isEnabled = false
+        val textLayout = LinearLayout(this)
+        textLayout.orientation = LinearLayout.VERTICAL
+
+        val textParams = LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f
+        )
+
+        textLayout.layoutParams = textParams
 
 
-            status.text =
-                "Preparando modelo e processando áudio..."
+        val languageName = TextView(this)
+        languageName.text = language.name
+        languageName.textSize = 18f
+
+        textLayout.addView(languageName)
 
 
-            lifecycleScope.launch {
+        val statusText = TextView(this)
+        statusText.text = "Verificando..."
+        statusText.textSize = 14f
+
+        textLayout.addView(statusText)
+
+
+        val actionButton = Button(this)
+        actionButton.text = "..."
+
+        itemLayout.addView(textLayout)
+        itemLayout.addView(actionButton)
+
+        modelsContainer.addView(itemLayout)
+
+
+        lifecycleScope.launch {
+
+            val installed = withContext(Dispatchers.IO) {
 
                 try {
 
-                    val selectedLanguage =
-                        sourceLanguageSpinner.selectedItem
-                            .toString()
+                    val model =
+                        TranslateRemoteModel.Builder(language.code)
+                            .build()
 
+                    val manager =
+                        RemoteModelManager.getInstance()
 
-                    val whisperLanguage =
-                        if (selectedLanguage == "Auto") {
-
-                            "auto"
-
-                        } else {
-
-                            languageCodes[selectedLanguage]
-                                ?: "auto"
-                        }
-
-
-                    val generatedCues =
-                        mutableListOf<Cue>()
-
-
-                    val modelPath =
-                        copyModel()
-
-
-                    withContext(
-                        Dispatchers.Default
-                    ) {
-
-                        AudioDecoder.decodeTo16kMonoChunks(
-                            this@MainActivity,
-                            uri
-                        ) { chunk ->
-
-
-                            val result =
-                                WhisperBridge.transcribe(
-                                    modelPath,
-                                    chunk.samples,
-                                    whisperLanguage,
-                                    maxOf(
-                                        2,
-                                        Runtime.getRuntime()
-                                            .availableProcessors() / 2
-                                    )
-                                )
-
-
-                            val chunkCues =
-                                Srt.parse(result)
-
-
-                            val cuesWithCorrectTime =
-                                chunkCues.map { cue ->
-
-                                    Cue(
-                                        cue.start +
-                                                chunk.startMs,
-
-                                        cue.end +
-                                                chunk.startMs,
-
-                                        cue.text
-                                    )
-                                }
-
-
-                            generatedCues.addAll(
-                                cuesWithCorrectTime
-                            )
-                        }
-                    }
-
-
-                    cues =
-                        generatedCues
-                            .sortedBy {
-                                it.start
-                            }
-
-
-                    lastSrt =
-                        Srt.format(cues)
-
-
-                    subtitles.text =
-                        lastSrt
-
-
-                    status.text =
-                        "Concluído. ${cues.size} legendas geradas."
-
-
-                    generate.isEnabled = true
-
-                    export.isEnabled =
-                        cues.isNotEmpty()
-
-                    translateButton.isEnabled =
-                        cues.isNotEmpty()
-
+                    Tasks.await(
+                        manager.isModelDownloaded(model)
+                    )
 
                 } catch (e: Exception) {
 
-                    status.text =
-                        "Erro ao processar o vídeo: ${e.message}"
+                    false
+                }
+            }
 
-                    generate.isEnabled = true
+
+            if (installed) {
+
+                statusText.text = "Modelo instalado"
+                actionButton.text = "✓ Instalado"
+                actionButton.isEnabled = false
+
+            } else {
+
+                statusText.text = "Modelo não instalado"
+                actionButton.text = "↓ Baixar"
+                actionButton.isEnabled = true
+            }
+
+
+            actionButton.setOnClickListener {
+
+                if (!installed) {
+
+                    downloadModel(
+                        language,
+                        actionButton,
+                        statusText
+                    )
                 }
             }
         }
+    }
+
+    private fun downloadModel(
+        language: LanguageModel,
+        button: Button,
+        statusText: TextView
+    ) {
+
+        button.isEnabled = false
+        button.text = "Baixando..."
+
+        statusText.text =
+            "Baixando modelo de ${language.name}..."
 
 
-        translateButton.setOnClickListener {
+        lifecycleScope.launch {
 
-            if (cues.isEmpty()) {
-
-                status.text =
-                    "Primeiro gere a legenda."
-
-                return@setOnClickListener
-            }
-
-
-            val sourceName =
-                sourceLanguageSpinner.selectedItem
-                    .toString()
-
-
-            val targetName =
-                targetLanguageSpinner.selectedItem
-                    .toString()
-
-
-            if (sourceName == "Auto") {
-
-                status.text =
-                    "Para traduzir, escolha o idioma de origem da legenda."
-
-                return@setOnClickListener
-            }
-
-
-            if (sourceName == targetName) {
-
-                status.text =
-                    "Escolha idiomas diferentes."
-
-                return@setOnClickListener
-            }
-
-
-            val sourceCode =
-                languageCodes[sourceName]
-
-
-            val targetCode =
-                languageCodes[targetName]
-
-
-            if (
-                sourceCode == null ||
-                targetCode == null
-            ) {
-
-                status.text =
-                    "Idioma não suportado."
-
-                return@setOnClickListener
-            }
-
-
-            translateButton.isEnabled = false
-            export.isEnabled = false
-
-
-            status.text =
-                "Preparando tradução..."
-
-
-            lifecycleScope.launch {
-
-                var translator: Translator? =
-                    null
-
+            val result = withContext(Dispatchers.IO) {
 
                 try {
 
-                    val options =
-                        TranslatorOptions.Builder()
-                            .setSourceLanguage(
-                                sourceCode
-                            )
-                            .setTargetLanguage(
-                                targetCode
-                            )
+                    val model =
+                        TranslateRemoteModel.Builder(language.code)
                             .build()
-
-
-                    translator =
-                        com.google.mlkit.nl.translate
-                            .Translation
-                            .getClient(options)
-
-
-                    status.text =
-                        "Verificando o modelo de tradução..."
-
 
                     val conditions =
                         DownloadConditions.Builder()
                             .build()
 
+                    val manager =
+                        RemoteModelManager.getInstance()
 
-                    withContext(
-                        Dispatchers.Default
-                    ) {
+                    Tasks.await(
+                        manager.download(model, conditions)
+                    )
 
-                        Tasks.await(
-                            translator.downloadModelIfNeeded(
-                                conditions
-                            )
-                        )
-                    }
-
-
-                    status.text =
-                        "Traduzindo legenda..."
-
-
-                    val translatedCues =
-                        withContext(
-                            Dispatchers.Default
-                        ) {
-
-                            cues.map { cue ->
-
-                                val translatedText =
-                                    Tasks.await(
-                                        translator.translate(
-                                            cue.text
-                                        )
-                                    )
-
-
-                                Cue(
-                                    cue.start,
-                                    cue.end,
-                                    translatedText
-                                )
-                            }
-                        }
-
-
-                    cues =
-                        translatedCues
-
-
-                    lastSrt =
-                        Srt.format(cues)
-
-
-                    subtitles.text =
-                        lastSrt
-
-
-                    status.text =
-                        "Legenda traduzida para $targetName."
-
-
-                    export.isEnabled =
-                        true
-
+                    true
 
                 } catch (e: Exception) {
 
-                    status.text =
-                        "Erro na tradução: ${e.message}"
-
-
-                } finally {
-
-                    translator?.close()
-
-                    translateButton.isEnabled =
-                        true
+                    false
                 }
             }
-        }
 
 
-        export.setOnClickListener {
+            if (result) {
 
-            if (lastSrt.isEmpty()) {
+                statusText.text = "Modelo instalado"
 
-                status.text =
-                    "Não existe legenda para exportar."
+                button.text = "✓ Instalado"
+                button.isEnabled = false
 
-                return@setOnClickListener
-            }
+                Toast.makeText(
+                    this@ModelsActivity,
+                    "Modelo de ${language.name} instalado com sucesso.",
+                    Toast.LENGTH_SHORT
+                ).show()
 
+            } else {
 
-            saver.launch(
-                "legenda.srt"
-            )
-        }
-    }
+                statusText.text = "Erro ao baixar"
 
+                button.text = "↓ Baixar"
+                button.isEnabled = true
 
-    private fun copyModel(): String {
-
-        val output =
-            File(
-                filesDir,
-                "ggml-tiny.bin"
-            )
-
-
-        if (!output.exists()) {
-
-            assets.open(
-                "models/ggml-tiny.bin"
-            ).use { input ->
-
-                output.outputStream()
-                    .use { outputStream ->
-
-                        input.copyTo(
-                            outputStream
-                        )
-                    }
+                Toast.makeText(
+                    this@ModelsActivity,
+                    "Não foi possível baixar o modelo.",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
-
-
-        return output.absolutePath
-    }
-
-
-    override fun onDestroy() {
-
-        player?.release()
-
-        super.onDestroy()
     }
 }
