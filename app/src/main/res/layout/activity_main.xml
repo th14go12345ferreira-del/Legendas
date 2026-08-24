@@ -1,97 +1,321 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="#F7F5FA">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="8dp">
+        android:padding="12dp">
+
+        <!-- ========================================================= -->
+        <!-- CABEÇALHO -->
+        <!-- ========================================================= -->
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginBottom="12dp"
+            android:background="#512DA8"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="☰"
+                android:textColor="#FFFFFF"
+                android:textSize="28sp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:layout_weight="1"
+                android:text="Legenda Offline"
+                android:textColor="#FFFFFF"
+                android:textSize="21sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚙"
+                android:textColor="#FFFFFF"
+                android:textSize="28sp" />
+
+        </LinearLayout>
+
+
+        <!-- ========================================================= -->
+        <!-- ETAPA 1 -->
+        <!-- ========================================================= -->
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Idioma da legenda"
-            android:textSize="18sp" />
-
-        <Spinner
-            android:id="@+id/languageSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Traduzir de"
+            android:text="1. Selecionar vídeo"
+            android:textColor="#39256F"
             android:textSize="18sp"
-            android:layout_marginTop="12dp" />
+            android:textStyle="bold"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="8dp" />
 
-        <Spinner
-            android:id="@+id/sourceLanguageSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Traduzir para"
-            android:textSize="18sp"
-            android:layout_marginTop="8dp" />
-
-        <Spinner
-            android:id="@+id/targetLanguageSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
 
         <Button
             android:id="@+id/selectButton"
             android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="📁  Selecionar vídeo"
+            android:textAllCaps="false"
+            android:textSize="17sp"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#512DA8" />
+
+
+        <!-- ========================================================= -->
+        <!-- PLAYER DE VÍDEO -->
+        <!-- ========================================================= -->
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="260dp"
+            android:layout_marginTop="16dp"
+            android:background="#000000">
+
+            <androidx.media3.ui.PlayerView
+                android:id="@+id/playerView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:keepScreenOn="true"
+                android:background="#000000" />
+
+
+            <!-- LEGENDA SOBRE O VÍDEO -->
+
+            <TextView
+                android:id="@+id/subtitles"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center_horizontal"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp"
+                android:layout_marginBottom="48dp"
+                android:background="#B0000000"
+                android:gravity="center"
+                android:paddingStart="14dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="8dp"
+                android:text=""
+                android:textColor="#FFFFFF"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+
+        <!-- ========================================================= -->
+        <!-- IDIOMA DA LEGENDA -->
+        <!-- ========================================================= -->
+
+        <TextView
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="1. Selecionar vídeo" />
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="8dp"
+            android:text="2. Idioma da legenda"
+            android:textColor="#39256F"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+
+        <Spinner
+            android:id="@+id/sourceLanguageSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:background="#FFFFFF" />
+
+
+        <!-- Spinner antigo mantido para compatibilidade -->
+
+        <Spinner
+            android:id="@+id/languageSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:visibility="gone" />
+
+
+        <!-- ========================================================= -->
+        <!-- TRADUÇÃO -->
+        <!-- ========================================================= -->
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="8dp"
+            android:text="3. Traduzir legenda para (opcional)"
+            android:textColor="#39256F"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+
+        <Spinner
+            android:id="@+id/targetLanguageSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:background="#FFFFFF" />
+
+
+        <!-- ========================================================= -->
+        <!-- BOTÕES PRINCIPAIS -->
+        <!-- ========================================================= -->
 
         <Button
             android:id="@+id/generateButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="2. Gerar legenda offline"
+            android:layout_height="58dp"
+            android:layout_marginTop="18dp"
+            android:text="✨  Gerar legenda"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:backgroundTint="#512DA8"
             android:enabled="false" />
+
 
         <Button
             android:id="@+id/translateButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="3. Traduzir legenda offline"
+            android:layout_height="58dp"
+            android:layout_marginTop="10dp"
+            android:text="🌐  Traduzir legenda"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:backgroundTint="#188038"
             android:enabled="false" />
+
 
         <Button
             android:id="@+id/exportButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="4. Exportar SRT"
+            android:layout_height="58dp"
+            android:layout_marginTop="10dp"
+            android:text="📄  Exportar SRT"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:backgroundTint="#1A73E8"
             android:enabled="false" />
+
+
+        <!-- ========================================================= -->
+        <!-- SALVAR VÍDEO COM LEGENDA -->
+        <!-- ========================================================= -->
+
+        <Button
+            android:id="@+id/saveVideoButton"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginTop="10dp"
+            android:text="🎬  Salvar vídeo legendado"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:backgroundTint="#F57C00"
+            android:enabled="false" />
+
+
+        <!-- ========================================================= -->
+        <!-- MODELOS DE IDIOMA -->
+        <!-- ========================================================= -->
+
+        <LinearLayout
+            android:id="@+id/modelsButton"
+            android:layout_width="match_parent"
+            android:layout_height="76dp"
+            android:layout_marginTop="18dp"
+            android:background="#EEE9F8"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="☁"
+                android:textColor="#512DA8"
+                android:textSize="32sp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Modelos de idiomas"
+                    android:textColor="#2D2148"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Baixe os modelos necessários para tradução offline"
+                    android:textColor="#666666"
+                    android:textSize="13sp" />
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="›"
+                android:textColor="#512DA8"
+                android:textSize="36sp" />
+
+        </LinearLayout>
+
+
+        <!-- ========================================================= -->
+        <!-- STATUS -->
+        <!-- ========================================================= -->
 
         <TextView
             android:id="@+id/status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Escolha um vídeo."
-            android:textSize="15sp"
-            android:layout_marginTop="8dp" />
+            android:layout_marginTop="18dp"
+            android:background="#E8F5E9"
+            android:padding="16dp"
+            android:text="Escolha um vídeo para começar."
+            android:textColor="#1B5E20"
+            android:textSize="15sp" />
 
-        <androidx.media3.ui.PlayerView
-            android:id="@+id/playerView"
-            android:layout_width="match_parent"
-            android:layout_height="260dp"
-            android:layout_marginTop="12dp" />
 
-        <TextView
-            android:id="@+id/subtitles"
+        <!-- ESPAÇO FINAL -->
+
+        <View
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="As legendas aparecerão aqui."
-            android:textSize="17sp"
-            android:padding="8dp" />
+            android:layout_height="24dp" />
 
     </LinearLayout>
 
