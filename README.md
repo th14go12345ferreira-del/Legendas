@@ -11,7 +11,7 @@ Versão 2 adiciona reconhecimento de fala offline com whisper.cpp, extração de
 6. O usuário pode exportar `legenda.srt`.
 
 ## Modelo
-O GitHub Actions baixa automaticamente o modelo multilíngue `ggml-tiny.bin` durante a compilação. O modelo tem cerca de 78 MB e é a opção mais leve recomendada para Android; modelos base são maiores e tendem a exigir mais recursos.
+O GitHub Actions baixa automaticamente o modelo multilíngue `ggml-small.bin` durante a compilação. O modelo tem cerca de 466 MB e oferece maior precisão de reconhecimento, porém exige mais memória e processamento do aparelho.
 
 Depois de instalado, o APK não precisa baixar o modelo novamente.
 
@@ -24,10 +24,10 @@ Depois de instalado, o APK não precisa baixar o modelo novamente.
 6. No Android 11, abra o APK e permita a instalação de fontes desconhecidas se o sistema solicitar.
 
 ## Observação de desempenho
-Whisper é computacionalmente pesado. Em celulares mais simples, vídeos longos podem levar bastante tempo e consumir memória/bateria. O modelo tiny foi escolhido para reduzir esse custo.
+Whisper é computacionalmente pesado. O modelo small foi escolhido para melhorar a precisão do reconhecimento, mas em celulares mais simples vídeos longos podem levar mais tempo e consumir mais memória e bateria.
 
 ## Limitação atual
 A etapa 2 gera legenda no idioma falado e exporta SRT. Tradução automática para outro idioma ainda é uma etapa separada; não foi fingida como "offline" sem adicionar um modelo de tradução ao APK.
 
 ## Base técnica
-A integração segue o padrão de uso Android/JNI mostrado pelo projeto oficial whisper.cpp. O projeto oficial recomenda modelos tiny/base para Android.
+A integração segue o padrão de uso Android/JNI mostrado pelo projeto oficial whisper.cpp. O projeto oficial recomenda modelos small para Android.
