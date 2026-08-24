@@ -12,241 +12,452 @@ import kotlin.math.roundToInt
 
 object AudioDecoder {
 
-    fun decodeTo16kMono(
+    private const val TARGET_SAMPLE_RATE = 16000
+    private const val DEFAULT_CHUNK_SECONDS = 30
+
+    data class AudioChunk(
+        val samples: FloatArray,
+        val startMs: Long,
+        val endMs: Long
+    )
+
+    /**
+     * Decodifica o áudio do vídeo em blocos.
+     *
+     * Exemplo:
+     * 00:00 -> 00:30
+     * 00:30 -> 01:00
+     * 01:00 -> 01:30
+     *
+     * O áudio inteiro NÃO fica armazenado na memória.
+     */
+    fun decodeTo16kMonoChunks(
         context: Context,
-        uri: Uri
-    ): FloatArray {
+        uri: Uri,
+        chunkSeconds: Int = DEFAULT_CHUNK_SECONDS,
+        onChunk: (AudioChunk) -> Unit
+    ) {
+
+        require(chunkSeconds > 0) {
+            "chunkSeconds deve ser maior que zero."
+        }
 
         val extractor = MediaExtractor()
+        var codec: MediaCodec? = null
 
-        context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-            extractor.setDataSource(pfd.fileDescriptor)
-        } ?: throw IllegalArgumentException("Não foi possível abrir o vídeo.")
+        try {
 
-        var track = -1
+            context.contentResolver
+                .openFileDescriptor(uri, "r")
+                ?.use { pfd ->
+                    extractor.setDataSource(pfd.fileDescriptor)
+                }
+                ?: throw IllegalArgumentException(
+                    "Não foi possível abrir o vídeo."
+                )
 
-        for (i in 0 until extractor.trackCount) {
-            val format = extractor.getTrackFormat(i)
-            val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
+            var audioTrack = -1
 
-            if (mime.startsWith("audio/")) {
-                track = i
-                break
-            }
-        }
+            for (i in 0 until extractor.trackCount) {
 
-        if (track < 0) {
-            extractor.release()
-            throw IllegalArgumentException("O vídeo não possui faixa de áudio.")
-        }
+                val format = extractor.getTrackFormat(i)
 
-        val inputFormat = extractor.getTrackFormat(track)
-        val mime = inputFormat.getString(MediaFormat.KEY_MIME)
-            ?: throw IllegalArgumentException("Formato de áudio inválido.")
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
 
-        extractor.selectTrack(track)
-
-        val codec = MediaCodec.createDecoderByType(mime)
-        codec.configure(inputFormat, null, null, 0)
-        codec.start()
-
-        var sampleRate =
-            inputFormat.getInteger(
-                MediaFormat.KEY_SAMPLE_RATE,
-                16000
-            )
-
-        var channels =
-            inputFormat.getInteger(
-                MediaFormat.KEY_CHANNEL_COUNT,
-                1
-            )
-
-        val chunks = ArrayList<FloatArray>()
-
-        val bufferInfo = MediaCodec.BufferInfo()
-
-        var inputFinished = false
-        var outputFinished = false
-
-        while (!outputFinished) {
-
-            if (!inputFinished) {
-
-                val inputIndex = codec.dequeueInputBuffer(10_000)
-
-                if (inputIndex >= 0) {
-
-                    val inputBuffer =
-                        codec.getInputBuffer(inputIndex)
-                            ?: throw IllegalStateException(
-                                "Buffer de entrada indisponível."
-                            )
-
-                    inputBuffer.clear()
-
-                    val sampleSize =
-                        extractor.readSampleData(inputBuffer, 0)
-
-                    if (sampleSize < 0) {
-
-                        codec.queueInputBuffer(
-                            inputIndex,
-                            0,
-                            0,
-                            0,
-                            MediaCodec.BUFFER_FLAG_END_OF_STREAM
-                        )
-
-                        inputFinished = true
-
-                    } else {
-
-                        codec.queueInputBuffer(
-                            inputIndex,
-                            0,
-                            sampleSize,
-                            extractor.sampleTime,
-                            0
-                        )
-
-                        extractor.advance()
-                    }
+                if (mime.startsWith("audio/")) {
+                    audioTrack = i
+                    break
                 }
             }
 
-            val outputIndex =
-                codec.dequeueOutputBuffer(bufferInfo, 10_000)
+            if (audioTrack < 0) {
+                throw IllegalArgumentException(
+                    "O vídeo não possui faixa de áudio."
+                )
+            }
 
-            when {
+            extractor.selectTrack(audioTrack)
 
-                outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+            val inputFormat = extractor.getTrackFormat(audioTrack)
 
-                    val outputFormat = codec.outputFormat
+            val mime = inputFormat.getString(MediaFormat.KEY_MIME)
+                ?: throw IllegalArgumentException(
+                    "Formato de áudio inválido."
+                )
 
-                    sampleRate =
-                        outputFormat.getInteger(
-                            MediaFormat.KEY_SAMPLE_RATE,
-                            sampleRate
-                        )
+            codec = MediaCodec.createDecoderByType(mime)
 
-                    channels =
-                        outputFormat.getInteger(
-                            MediaFormat.KEY_CHANNEL_COUNT,
-                            channels
-                        )
-                }
+            codec.configure(
+                inputFormat,
+                null,
+                null,
+                0
+            )
 
-                outputIndex >= 0 -> {
+            codec.start()
 
-                    if (bufferInfo.size > 0) {
+            val samplesPerChunk =
+                TARGET_SAMPLE_RATE * chunkSeconds
 
-                        val outputBuffer =
-                            codec.getOutputBuffer(outputIndex)
+            var chunkBuffer =
+                FloatArray(samplesPerChunk)
 
-                        if (outputBuffer != null) {
+            var chunkPosition = 0
 
-                            outputBuffer.position(bufferInfo.offset)
-                            outputBuffer.limit(
-                                bufferInfo.offset + bufferInfo.size
+            var chunkStartMs = 0L
+
+            var totalOutputSamples = 0L
+
+            var inputFinished = false
+            var outputFinished = false
+
+            var sourceSampleRate =
+                inputFormat.getIntegerOrDefault(
+                    MediaFormat.KEY_SAMPLE_RATE,
+                    TARGET_SAMPLE_RATE
+                )
+
+            var sourceChannels =
+                inputFormat.getIntegerOrDefault(
+                    MediaFormat.KEY_CHANNEL_COUNT,
+                    1
+                )
+
+            val bufferInfo = MediaCodec.BufferInfo()
+
+            while (!outputFinished) {
+
+                /*
+                 * Alimenta o decoder.
+                 */
+                if (!inputFinished) {
+
+                    val inputIndex =
+                        codec.dequeueInputBuffer(10_000)
+
+                    if (inputIndex >= 0) {
+
+                        val inputBuffer =
+                            codec.getInputBuffer(inputIndex)
+                                ?: throw IllegalStateException(
+                                    "Buffer de entrada indisponível."
+                                )
+
+                        inputBuffer.clear()
+
+                        val sampleSize =
+                            extractor.readSampleData(
+                                inputBuffer,
+                                0
                             )
 
-                            val pcm = readPcm16(
-                                outputBuffer,
-                                channels
+                        if (sampleSize < 0) {
+
+                            codec.queueInputBuffer(
+                                inputIndex,
+                                0,
+                                0,
+                                0,
+                                MediaCodec.BUFFER_FLAG_END_OF_STREAM
                             )
 
-                            if (pcm.isNotEmpty()) {
-                                chunks.add(pcm)
-                            }
+                            inputFinished = true
+
+                        } else {
+
+                            codec.queueInputBuffer(
+                                inputIndex,
+                                0,
+                                sampleSize,
+                                extractor.sampleTime,
+                                0
+                            )
+
+                            extractor.advance()
                         }
                     }
+                }
 
-                    codec.releaseOutputBuffer(
-                        outputIndex,
-                        false
+                /*
+                 * Recebe áudio decodificado.
+                 */
+                val outputIndex =
+                    codec.dequeueOutputBuffer(
+                        bufferInfo,
+                        10_000
                     )
 
-                    if (
-                        bufferInfo.flags and
-                        MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                    ) {
-                        outputFinished = true
+                when {
+
+                    outputIndex == MediaCodec.INFO_TRY_AGAIN_LATER -> {
+                        // Ainda não há saída disponível.
+                    }
+
+                    outputIndex ==
+                        MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+
+                        val outputFormat =
+                            codec.outputFormat
+
+                        sourceSampleRate =
+                            outputFormat.getIntegerOrDefault(
+                                MediaFormat.KEY_SAMPLE_RATE,
+                                sourceSampleRate
+                            )
+
+                        sourceChannels =
+                            outputFormat.getIntegerOrDefault(
+                                MediaFormat.KEY_CHANNEL_COUNT,
+                                sourceChannels
+                            )
+                    }
+
+                    outputIndex >= 0 -> {
+
+                        if (bufferInfo.size > 0) {
+
+                            val outputBuffer =
+                                codec.getOutputBuffer(outputIndex)
+
+                            if (outputBuffer != null) {
+
+                                outputBuffer.position(
+                                    bufferInfo.offset
+                                )
+
+                                outputBuffer.limit(
+                                    bufferInfo.offset +
+                                        bufferInfo.size
+                                )
+
+                                val pcmSamples =
+                                    pcm16ToMonoFloat(
+                                        outputBuffer,
+                                        sourceChannels
+                                    )
+
+                                val samples16k =
+                                    resample(
+                                        pcmSamples,
+                                        sourceSampleRate,
+                                        TARGET_SAMPLE_RATE
+                                    )
+
+                                var sourcePosition = 0
+
+                                /*
+                                 * Copia para o bloco atual.
+                                 *
+                                 * Quando o bloco chega a 30 segundos,
+                                 * envia para o MainActivity e cria
+                                 * outro bloco.
+                                 */
+                                while (
+                                    sourcePosition <
+                                    samples16k.size
+                                ) {
+
+                                    val remainingInChunk =
+                                        samplesPerChunk -
+                                            chunkPosition
+
+                                    val remainingInSource =
+                                        samples16k.size -
+                                            sourcePosition
+
+                                    val copySize =
+                                        minOf(
+                                            remainingInChunk,
+                                            remainingInSource
+                                        )
+
+                                    System.arraycopy(
+                                        samples16k,
+                                        sourcePosition,
+                                        chunkBuffer,
+                                        chunkPosition,
+                                        copySize
+                                    )
+
+                                    sourcePosition += copySize
+                                    chunkPosition += copySize
+                                    totalOutputSamples += copySize
+
+                                    if (
+                                        chunkPosition >=
+                                        samplesPerChunk
+                                    ) {
+
+                                        val chunkEndMs =
+                                            (
+                                                totalOutputSamples *
+                                                    1000L
+                                                /
+                                                TARGET_SAMPLE_RATE
+                                            )
+
+                                        onChunk(
+                                            AudioChunk(
+                                                samples =
+                                                    chunkBuffer,
+                                                startMs =
+                                                    chunkStartMs,
+                                                endMs =
+                                                    chunkEndMs
+                                            )
+                                        )
+
+                                        chunkStartMs =
+                                            chunkEndMs
+
+                                        chunkBuffer =
+                                            FloatArray(
+                                                samplesPerChunk
+                                            )
+
+                                        chunkPosition = 0
+                                    }
+                                }
+                            }
+                        }
+
+                        codec.releaseOutputBuffer(
+                            outputIndex,
+                            false
+                        )
+
+                        if (
+                            bufferInfo.flags and
+                            MediaCodec.BUFFER_FLAG_END_OF_STREAM
+                            != 0
+                        ) {
+                            outputFinished = true
+                        }
                     }
                 }
             }
+
+            /*
+             * Envia o último bloco.
+             *
+             * Exemplo:
+             * Se o vídeo terminou em 12:14,
+             * o último bloco pode ter apenas
+             * 14 segundos.
+             */
+            if (chunkPosition > 0) {
+
+                val finalSamples =
+                    chunkBuffer.copyOf(chunkPosition)
+
+                val chunkEndMs =
+                    (
+                        totalOutputSamples *
+                            1000L
+                        /
+                        TARGET_SAMPLE_RATE
+                    )
+
+                onChunk(
+                    AudioChunk(
+                        samples = finalSamples,
+                        startMs = chunkStartMs,
+                        endMs = chunkEndMs
+                    )
+                )
+            }
+
+        } finally {
+
+            try {
+                codec?.stop()
+            } catch (_: Exception) {
+            }
+
+            try {
+                codec?.release()
+            } catch (_: Exception) {
+            }
+
+            try {
+                extractor.release()
+            } catch (_: Exception) {
+            }
         }
-
-        codec.stop()
-        codec.release()
-        extractor.release()
-
-        val totalSize = chunks.sumOf { it.size }
-
-        if (totalSize == 0) {
-            throw IllegalArgumentException(
-                "Não foi possível extrair o áudio do vídeo."
-            )
-        }
-
-        val mono = FloatArray(totalSize)
-
-        var position = 0
-
-        for (chunk in chunks) {
-            chunk.copyInto(mono, position)
-            position += chunk.size
-        }
-
-        return resample(
-            mono,
-            sampleRate,
-            16000
-        )
     }
 
-    private fun readPcm16(
+    /**
+     * Converte PCM 16-bit para FloatArray mono.
+     *
+     * Se o áudio tiver 2 canais, mistura os canais.
+     */
+    private fun pcm16ToMonoFloat(
         buffer: ByteBuffer,
         channels: Int
     ): FloatArray {
 
-        buffer.order(ByteOrder.LITTLE_ENDIAN)
+        val safeChannels =
+            channels.coerceAtLeast(1)
 
-        val samples =
-            buffer.remaining() / 2
+        val byteBuffer =
+            buffer.slice().order(
+                ByteOrder.LITTLE_ENDIAN
+            )
 
-        if (samples <= 0) {
+        val totalSamples =
+            byteBuffer.remaining() / 2
+
+        val frames =
+            totalSamples / safeChannels
+
+        if (frames <= 0) {
             return FloatArray(0)
         }
 
-        val frames =
-            samples / channels.coerceAtLeast(1)
-
-        val output = FloatArray(frames)
+        val output =
+            FloatArray(frames)
 
         for (frame in 0 until frames) {
 
             var sum = 0f
+            var channelsRead = 0
 
-            for (channel in 0 until channels) {
+            for (
+                channel in
+                0 until safeChannels
+            ) {
 
-                if (buffer.remaining() < 2) {
+                if (
+                    byteBuffer.remaining() < 2
+                ) {
                     break
                 }
 
                 val sample =
-                    buffer.short.toInt() / 32768f
+                    byteBuffer.short
+                        .toInt()
+                        .toFloat() /
+                        32768f
 
                 sum += sample
+                channelsRead++
             }
 
             output[frame] =
-                sum / channels.coerceAtLeast(1)
+                if (channelsRead > 0) {
+                    sum / channelsRead
+                } else {
+                    0f
+                }
         }
 
         return output
     }
 
+    /**
+     * Converte qualquer taxa de amostragem
+     * para 16 kHz usando interpolação linear.
+     */
     private fun resample(
         input: FloatArray,
         fromRate: Int,
@@ -257,26 +468,34 @@ object AudioDecoder {
             return FloatArray(0)
         }
 
+        if (fromRate <= 0) {
+            return input
+        }
+
         if (fromRate == toRate) {
             return input
         }
 
         val outputSize =
-            (input.size.toDouble() *
-                toRate.toDouble() /
-                fromRate.toDouble())
+            (
+                input.size.toDouble() *
+                    toRate.toDouble() /
+                    fromRate.toDouble()
+            )
                 .roundToInt()
                 .coerceAtLeast(1)
 
-        val output = FloatArray(outputSize)
+        val output =
+            FloatArray(outputSize)
 
         val ratio =
             fromRate.toDouble() /
-            toRate.toDouble()
+                toRate.toDouble()
 
         for (i in output.indices) {
 
-            val position = i * ratio
+            val position =
+                i.toDouble() * ratio
 
             val index =
                 position.toInt()
@@ -292,16 +511,35 @@ object AudioDecoder {
                     )
 
             val fraction =
-                position - index
+                position - index.toDouble()
 
             output[i] =
-                input[index] +
-                    (
-                        input[nextIndex] -
-                            input[index]
-                    ) * fraction.toFloat()
+                (
+                    input[index] *
+                        (1.0 - fraction) +
+                    input[nextIndex] *
+                        fraction
+                ).toFloat()
         }
 
         return output
+    }
+
+    private fun MediaFormat.getIntegerOrDefault(
+        key: String,
+        defaultValue: Int
+    ): Int {
+
+        return try {
+
+            if (containsKey(key)) {
+                getInteger(key)
+            } else {
+                defaultValue
+            }
+
+        } catch (_: Exception) {
+            defaultValue
+        }
     }
 }
