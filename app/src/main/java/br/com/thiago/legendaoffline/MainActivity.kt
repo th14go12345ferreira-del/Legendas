@@ -346,37 +346,35 @@ class MainActivity : AppCompatActivity() {
                         com.google.mlkit.nl.translate.Translation
                             .getClient(options)
 
-                    status.text =
-                        "Verificando o modelo de tradução..."
+                    status.text = "Verificando o modelo de tradução..."
 
-                    val conditions =
-                        DownloadConditions.Builder()
-                            .build()
+val conditions =
+    DownloadConditions.Builder()
+        .build()
 
-                    Tasks.await(
-                        translator.downloadModelIfNeeded(conditions)
-                    )
+val translatedCues =
+    withContext(Dispatchers.Default) {
 
-                    status.text =
-                        "Traduzindo legenda no aparelho..."
+        Tasks.await(
+            translator.downloadModelIfNeeded(conditions)
+        )
 
-                    val translatedCues =
-                        withContext(Dispatchers.Default) {
+        cues.map { cue ->
 
-                            cues.map { cue ->
+            val translatedText =
+                Tasks.await(
+                    translator.translate(cue.text)
+                )
 
-                                val translatedText =
-                                    Tasks.await(
-                                        translator.translate(cue.text)
-                                    )
+            Cue(
+                cue.start,
+                cue.end,
+                translatedText
+            )
+        }
+    }
 
-                                Cue(
-                                    cue.start,
-                                    cue.end,
-                                    translatedText
-                                )
-                            }
-                        }
+status.text = "Legenda traduzida no aparelho."
 
                     cues = translatedCues
 
